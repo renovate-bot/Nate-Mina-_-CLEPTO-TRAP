@@ -1,0 +1,157 @@
+<div class="min-h-screen bg-[#0a0a0a] flex flex-col font-sans text-gray-200">
+  <mat-toolbar color="primary" class="shadow-md z-10 flex items-center justify-between px-4 md:px-8 border-b border-gray-800 !bg-[#111]">
+    <div class="flex items-center gap-3">
+      <div class="p-2 rounded-lg bg-blue-500/20 text-blue-400">
+        <mat-icon>videocam</mat-icon>
+      </div>
+      <div class="flex flex-col leading-tight">
+        <span class="font-bold text-xl tracking-tight text-white">Clepto Trap</span>
+        <span class="text-xs font-mono text-gray-500 uppercase tracking-widest">AI Merch Security Against Shoplifters</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <input type="file" #fileInput accept="video/*" class="hidden" (change)="handleFileUpload($event)">
+      <button mat-flat-button color="primary" (click)="triggerFileInput()" class="rounded-lg px-6 border border-white/10 !bg-[#222] hover:!bg-[#333] transition-colors">
+        <div class="flex items-center gap-2">
+          <mat-icon class="text-gray-400">folder_open</mat-icon>
+          <span class="font-medium text-gray-300">Load Test Feed</span>
+        </div>
+      </button>
+      <button mat-flat-button [color]="isMonitoring() ? 'warn' : 'accent'" (click)="toggleMonitoring()" class="rounded-lg px-6 shadow-lg shadow-blue-900/20" [ngClass]="{'!bg-red-600': isMonitoring(), '!bg-blue-600': !isMonitoring()}">
+        <div class="flex items-center gap-2 text-white">
+          <mat-icon>{{ isMonitoring() ? 'stop' : 'podcasts' }}</mat-icon>
+          <span class="font-medium font-mono uppercase tracking-wider">{{ isMonitoring() ? 'Disconnect RTSP' : 'Connect Camera' }}</span>
+        </div>
+      </button>
+    </div>
+  </mat-toolbar>
+
+  <main class="flex-grow p-4 md:p-8 flex flex-col lg:flex-row gap-8 max-w-[1700px] mx-auto w-full">
+    
+    <!-- Camera Feed Column -->
+    <div class="flex-grow flex flex-col gap-6">
+      <div class="bg-black rounded-lg shadow-2xl border border-gray-800 overflow-hidden relative aspect-video flex items-center justify-center ring-1 ring-white/5">
+        <video #videoElement class="w-full h-full object-cover" [class.hidden]="!isMonitoring()" playsinline muted></video>
+        
+        @if (!isMonitoring()) {
+          <div class="absolute inset-0 flex flex-col items-center justify-center text-gray-500 bg-[#0d0d0d] font-mono">
+            <mat-icon class="text-6xl mb-4 opacity-30">videocam_off</mat-icon>
+            <p class="text-xl font-medium text-gray-400 uppercase tracking-widest">VMS Stream Offline</p>
+            <p class="text-xs opacity-75 mt-2">Awaiting RTSP/Webcam connection</p>
+          </div>
+        }
+        
+        @if (isMonitoring()) {
+          <!-- Mock RTSP Overlay Elements -->
+          <div class="absolute top-4 left-4 flex flex-col gap-2">
+            <div class="flex items-center gap-3 bg-black/80 backdrop-blur-md text-white px-3 py-1.5 rounded-md text-xs font-mono border border-white/10 shadow-lg">
+              <div class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
+              REC
+            </div>
+            <div class="flex items-center gap-2 bg-black/80 backdrop-blur-md text-emerald-400 px-3 py-1.5 rounded-md text-xs font-mono border border-white/10 shadow-lg">
+              <mat-icon class="text-[16px] w-4 h-4">memory</mat-icon>
+              Temporal AI: ACTIVE
+            </div>
+          </div>
+          
+          <div class="absolute bottom-8 right-4 text-white/50 text-xs font-mono text-right drop-shadow-md">
+            <div>CAM-01 / STORE-FRONT</div>
+            <div>[IP: 192.168.1.64]</div>
+          </div>
+          
+          <!-- Threat Level Indicator Overlay -->
+          <div class="absolute bottom-8 left-4 flex flex-col gap-1">
+            <div class="text-[10px] font-mono text-gray-400 uppercase tracking-widest drop-shadow-md">Threat Level</div>
+            <div class="font-mono text-xl font-bold flex items-center gap-2" [ngClass]="getConfidenceTextColor(currentStatus())">
+               @if (currentConfidence() > 0) {
+                 {{ currentConfidence() | percent:'1.0-0' }} {{ currentStatus() }}
+               } @else {
+                 ANALYZING...
+               }
+            </div>
+          </div>
+
+          <!-- Confidence Progress Bar -->
+          <div class="absolute bottom-0 left-0 right-0 h-1.5 bg-gray-900/80 backdrop-blur z-20">
+            <div class="h-full transition-all duration-1000 ease-in-out" 
+                 [style.width.%]="currentConfidence() > 0 ? (currentConfidence() * 100) : 100" 
+                 [ngClass]="currentConfidence() > 0 ? getConfidenceBarColor(currentStatus()) : 'bg-blue-500 animate-pulse'">
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Latest Alert Banner -->
+      @if (latestEvent()) {
+        <div class="rounded-xl shadow-2xl border-l-[6px] p-5 transition-all duration-300 transform" [ngClass]="getEventColor(latestEvent().type).replace('bg-', 'bg-opacity-10 bg-').replace('text-', 'text-').replace('border-', 'border-')">
+          <div class="flex items-start gap-5">
+            <div class="p-3 rounded-lg shadow-inner bg-black/20">
+              <mat-icon class="text-3xl" [ngClass]="getEventColor(latestEvent().type).split(' ')[1]">{{ getEventIcon(latestEvent().type) }}</mat-icon>
+            </div>
+            <div class="flex-grow">
+              <div class="flex items-center justify-between mb-1">
+                <h3 class="font-bold text-xl uppercase tracking-wider" [ngClass]="getEventColor(latestEvent().type).split(' ')[1]">{{ latestEvent().type }} ALERT</h3>
+                <span class="text-xs font-mono font-bold px-2 py-1 rounded bg-black/30 border border-white/10">
+                  CONFIDENCE: {{ latestEvent().confidence | percent }}
+                </span>
+              </div>
+              <p class="text-sm opacity-90 font-medium leading-relaxed max-w-3xl text-gray-200">{{ latestEvent().description }}</p>
+              <div class="flex items-center gap-4 mt-3 text-xs font-mono opacity-60">
+                <span class="flex items-center gap-1"><mat-icon class="text-[14px] w-3.5 h-3.5">schedule</mat-icon> {{ latestEvent().timestamp | date:'HH:mm:ss.SSS' }}</span>
+                <span class="flex items-center gap-1"><mat-icon class="text-[14px] w-3.5 h-3.5">center_focus_strong</mat-icon> Gesture Analyzed</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Events Log Column -->
+    <div class="w-full lg:w-[450px] flex flex-col gap-4">
+      <div class="flex-grow flex flex-col bg-[#111] shadow-2xl rounded-lg border border-gray-800 overflow-hidden h-[800px]">
+        <div class="border-b border-gray-800 p-4 bg-[#161616] text-gray-300 z-10 flex items-center justify-between">
+          <h2 class="font-bold text-sm uppercase tracking-widest flex items-center gap-2">
+            <mat-icon class="text-gray-500 text-[18px] w-4 h-4">warning_amber</mat-icon>
+            Incident Log
+          </h2>
+          <span class="bg-gray-800 text-gray-300 font-mono text-[10px] px-2 py-1 rounded">{{ events().length }} BUFFERED</span>
+        </div>
+        
+        <div class="flex-grow overflow-y-auto p-0 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+          @if (events().length === 0) {
+            <div class="h-full flex flex-col items-center justify-center text-gray-500 p-8 text-center font-mono">
+              <mat-icon class="text-5xl mb-4 opacity-20">shield</mat-icon>
+              <p class="text-sm uppercase tracking-widest">No Alerts</p>
+              <p class="text-xs mt-2 opacity-50">Temporal buffer is clear</p>
+            </div>
+          } @else {
+            <div class="flex flex-col divide-y divide-gray-800/60">
+              @for (event of events(); track event.id) {
+                <div class="p-4 hover:bg-[#1a1a1a] transition-colors flex gap-4 group">
+                  <div class="relative w-20 h-20 flex-shrink-0">
+                    <img [src]="event.imageUrl" class="w-full h-full object-cover rounded shadow-md border border-gray-700 grayscale-[0.3]" alt="Incident snapshot">
+                    <div class="absolute -top-1.5 -right-1.5 rounded-full p-1 shadow-md bg-[#222] border border-gray-700">
+                      <mat-icon class="text-[12px] w-3 h-3 flex items-center justify-center" [ngClass]="getEventColor(event.type).split(' ')[1]">{{ getEventIcon(event.type) }}</mat-icon>
+                    </div>
+                  </div>
+                  <div class="flex-grow flex flex-col justify-center">
+                    <div class="flex items-center justify-between mb-1">
+                      <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shadow-sm" [ngClass]="getEventColor(event.type).replace('bg-', 'bg-opacity-20 bg-')">
+                        {{ event.type }}
+                      </span>
+                      <span class="text-[10px] font-mono text-gray-500">{{ event.timestamp | date:'HH:mm:ss' }}</span>
+                    </div>
+                    <p class="text-xs text-gray-400 line-clamp-3 leading-snug">{{ event.description }}</p>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Hidden canvas for frame capture -->
+<canvas #canvasElement class="hidden"></canvas>

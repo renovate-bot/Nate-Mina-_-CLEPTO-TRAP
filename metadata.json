@@ -1,0 +1,7 @@
+{
+  "name": "Clepto Trap - AI Merch Security",
+  "description": "Real-time AI behavioral detection against shoplifters.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
