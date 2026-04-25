@@ -72,9 +72,15 @@ export class App implements OnDestroy, OnInit {
   user = signal<User | null>(null);
   authLoaded = signal(false);
   
+  autoSaveEnabled = signal(true);
+  showSettings = signal(false);
+  dailyDigest = signal<string | null>(null);
+  isGeneratingDigest = signal(false);
+
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
   private ai: GoogleGenAI;
   private eventsUnsubscribe: (() => void) | null = null;
+  private recorders = new Map<string, { recorder: MediaRecorder, chunks: Blob[] }>();
 
   constructor() {
     this.ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
@@ -187,7 +193,10 @@ export class App implements OnDestroy, OnInit {
           const video = document.getElementById('video-' + id) as HTMLVideoElement;
           if (video && feed.videoUrl) {
              video.src = feed.videoUrl;
-             video.play().catch(e => console.error("Auto-play blocked:", e));
+             video.play().then(() => {
+                const stream = (video as any).captureStream?.() || (video as any).mozCaptureStream?.();
+                if (stream) this.setupRecorder(id, stream);
+             }).catch(e => console.error("Auto-play blocked:", e));
           }
        }, 200);
     }
@@ -227,7 +236,9 @@ export class App implements OnDestroy, OnInit {
          const video = document.getElementById('video-' + id) as HTMLVideoElement;
          if (video && feed.mediaStream) {
             video.srcObject = feed.mediaStream;
-            video.play().catch(e => console.error("Auto-play blocked:", e));
+            video.play().then(() => {
+                this.setupRecorder(id, feed.mediaStream!);
+            }).catch(e => console.error("Auto-play blocked:", e));
          }
       }, 200);
       
@@ -241,6 +252,11 @@ export class App implements OnDestroy, OnInit {
   }
 
   removeFeed(id: string) {
+    const state = this.recorders.get(id);
+    if (state) {
+       try { state.recorder.stop(); } catch(e){}
+       this.recorders.delete(id);
+    }
     const feed = this.feeds().find(f => f.id === id);
     if (feed) {
        if (feed.mediaStream) {
@@ -414,6 +430,12 @@ Return a JSON object with 'type', 'description' (detailed and actionable explana
              this.events.update(events => [newEvent, ...events].slice(0, 50));
           }
           this.playSound(result.type);
+          
+          if (this.autoSaveEnabled()) {
+             setTimeout(() => {
+                this.saveEventClipAndLog(feedId, result.description);
+             }, 5000); // give 5 seconds for consequence info
+          }
         }
       }
     } catch (error: any) {
@@ -470,6 +492,110 @@ Return a JSON object with 'type', 'description' (detailed and actionable explana
     }
   }
   
+  toggleSettings() {
+    this.showSettings.set(!this.showSettings());
+  }
+
+  private setupRecorder(id: string, stream: MediaStream) {
+    try {
+       const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
+         ? { mimeType: 'video/webm;codecs=vp9' } 
+         : { mimeType: 'video/webm' };
+         
+       const recorder = new MediaRecorder(stream, options);
+       this.recorders.set(id, { recorder, chunks: [] });
+       
+       recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+             const state = this.recorders.get(id);
+             if (state) {
+                state.chunks.push(e.data);
+                if (state.chunks.length > 60) {
+                   state.chunks.shift(); // Keep last 60 seconds
+                }
+             }
+          }
+       };
+       recorder.start(1000);
+    } catch (err) {
+       console.warn("MediaRecorder start failed", err);
+    }
+  }
+
+  private saveEventClipAndLog(feedId: string, description: string) {
+     const state = this.recorders.get(feedId);
+     const chunks = state?.chunks || [];
+     if (chunks.length === 0) return;
+
+     const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+
+     // Save Video
+     const blob = new Blob(chunks, { type: 'video/webm' });
+     const videoUrl = window.URL.createObjectURL(blob);
+     const aVid = document.createElement('a');
+     aVid.style.display = 'none';
+     aVid.href = videoUrl;
+     aVid.download = `CleptoTrap-Video-${timestampStr}.webm`;
+     document.body.appendChild(aVid);
+     aVid.click();
+
+     // Save Text Log
+     const logContent = `CLEPTO TRAP SECURITY ALERT LOG\n=================================\nTimestamp: ${new Date().toISOString()}\nFeed ID: ${feedId}\n\nEvent Description:\n${description}\n`;
+     const logBlob = new Blob([logContent], { type: 'text/plain' });
+     const logUrl = window.URL.createObjectURL(logBlob);
+     const aLog = document.createElement('a');
+     aLog.style.display = 'none';
+     aLog.href = logUrl;
+     aLog.download = `CleptoTrap-Log-${timestampStr}.txt`;
+     document.body.appendChild(aLog);
+     aLog.click();
+
+     setTimeout(() => {
+        document.body.removeChild(aVid);
+        document.body.removeChild(aLog);
+        window.URL.revokeObjectURL(videoUrl);
+        window.URL.revokeObjectURL(logUrl);
+     }, 1000);
+  }
+
+  closeDigest() {
+    this.dailyDigest.set(null);
+  }
+
+  async generateDigest(timeframe: 'daily' | 'weekly' = 'daily') {
+    const validEvents = this.events().filter(e => e.type !== 'error');
+    if (validEvents.length === 0) {
+      alert("No security events to summarize.");
+      return;
+    }
+    
+    this.isGeneratingDigest.set(true);
+    try {
+      const eventsText = validEvents.slice(0, 50).map(e => {
+         return `Time: ${e.timestamp}, Type: ${e.type}, Confidence: ${(e.confidence * 100).toFixed(0)}%, Description: ${e.description}`;
+      }).join('\n');
+
+      const prompt = `You are a retail security AI. Generate a concise ${timeframe} security digest based on the following incident logs. Summarize key patterns, behaviors, overall risk assessment, and any actionable recommendations. Keep it professional, concise, and under 200 words. Format with simple text (no markdown formatting if not supported, but basic bold is fine).
+
+Logs:
+${eventsText}`;
+
+      const response = await this.ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt
+      });
+
+      if (response.text) {
+        this.dailyDigest.set(response.text);
+      }
+    } catch (e) {
+      console.error("Error generating digest:", e);
+      alert("Failed to generate digest. Rate limits or connectivity issue.");
+    } finally {
+      this.isGeneratingDigest.set(false);
+    }
+  }
+
   getEventIcon(type: string): string {
     switch(type) {
       case 'shoplifting': return 'warning';
