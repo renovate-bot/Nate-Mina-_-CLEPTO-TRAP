@@ -146,9 +146,16 @@
             </div>
           } @else {
             @for (event of events(); track event.id) {
-              <div class="bg-[#111] rounded-xl border border-gray-800 p-3 flex gap-3">
+              <div class="bg-[#111] rounded-xl border border-gray-800 p-3 flex gap-3 cursor-pointer hover:bg-[#1a1a1a] transition-all group active:scale-[0.98]" (click)="selectedEvent.set(event)">
                 <div class="relative w-16 h-16 flex-shrink-0">
                   <img [src]="event.imageUrl" class="w-full h-full object-cover rounded-lg shadow-sm border border-gray-700 grayscale-[0.2]" alt="Incident snapshot">
+                  
+                  @if (videoBlobs().has(event.id)) {
+                    <div class="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg group-hover:bg-black/20 transition-colors">
+                       <mat-icon class="text-white text-[24px] w-6 h-6 drop-shadow-md">play_arrow</mat-icon>
+                    </div>
+                  }
+
                   <div class="absolute -top-1.5 -right-1.5 rounded-full p-0.5 shadow-md bg-[#222] border border-gray-700">
                     <mat-icon class="text-[10px] w-2.5 h-2.5 flex items-center justify-center" [ngClass]="getEventColor(event.type).split(' ')[1]">{{ getEventIcon(event.type) }}</mat-icon>
                   </div>
@@ -158,7 +165,7 @@
                     <span class="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" [ngClass]="getEventColor(event.type).replace('bg-', 'bg-opacity-20 bg-')">
                       {{ event.type }}
                     </span>
-                    <span class="text-[9px] font-mono text-gray-500">{{ event.timestamp | date:'shortTime' }}</span>
+                    <span class="text-[9px] font-mono text-gray-500">{{ event.timestamp | date:'short' }}</span>
                   </div>
                   <p class="text-[11px] text-gray-400 line-clamp-2 leading-snug">{{ event.description }}</p>
                 </div>
@@ -256,6 +263,48 @@
        </div>
        <div class="mt-4 pt-4 border-t border-gray-800 text-[10px] text-gray-500 text-center font-mono uppercase">
           Generated automatically by Lexius Vision AI
+       </div>
+     </div>
+   </div>
+}
+
+<!-- Event Replay Modal -->
+@if (selectedEvent()) {
+   <div class="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+     <div class="bg-[#111] border border-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh] overflow-hidden">
+       <div class="flex items-center justify-between p-4 border-b border-gray-800 bg-[#161616]">
+         <div class="flex items-center gap-2">
+           <mat-icon class="text-[20px] w-5 h-5 flex items-center justify-center" [ngClass]="getEventColor(selectedEvent()!.type).split(' ')[1]">{{ getEventIcon(selectedEvent()!.type) }}</mat-icon>
+           <h2 class="text-base font-bold text-white tracking-tight uppercase">{{ selectedEvent()!.type }} Incident</h2>
+         </div>
+         <button mat-icon-button (click)="selectedEvent.set(null)" class="text-gray-500 hover:text-white bg-black/20 rounded-full w-8 h-8 flex items-center justify-center">
+           <mat-icon class="text-[18px]">close</mat-icon>
+         </button>
+       </div>
+       
+       <div class="flex-grow flex flex-col">
+         @if (videoBlobs().has(selectedEvent()!.id)) {
+            <video [src]="videoBlobs().get(selectedEvent()!.id)" controls autoplay class="w-full bg-black max-h-[50vh] object-contain"></video>
+         } @else {
+            <div class="relative w-full bg-black max-h-[50vh] flex items-center justify-center">
+               <img [src]="selectedEvent()!.imageUrl" class="w-full h-full object-contain max-h-[50vh]">
+               <div class="absolute inset-0 flex items-center justify-center bg-black/60">
+                 <div class="text-center font-mono text-gray-400">
+                    <mat-icon class="text-4xl mb-2 opacity-50">videocam_off</mat-icon>
+                    <p class="text-xs tracking-widest uppercase">Video clip not available</p>
+                 </div>
+               </div>
+            </div>
+         }
+         <div class="p-6 overflow-y-auto">
+            <div class="flex items-center justify-between mb-2">
+               <span class="text-xs font-mono text-gray-500"><mat-icon class="text-[14px] w-3.5 h-3.5 inline-block align-text-bottom">schedule</mat-icon> {{ selectedEvent()!.timestamp | date:'medium' }}</span>
+               <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-gray-900 border border-gray-700 text-gray-300">
+                 CONFIDENCE: {{ selectedEvent()!.confidence | percent }}
+               </span>
+            </div>
+            <p class="text-sm text-gray-300 leading-relaxed font-medium">{{ selectedEvent()!.description }}</p>
+         </div>
        </div>
      </div>
    </div>

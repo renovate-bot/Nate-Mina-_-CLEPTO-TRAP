@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, SafeAreaView, Image } from 'react-native';
 import { Video } from 'expo-av';
-import { Camera, AlertCircle, Clock, Settings, FolderOpen } from 'lucide-react-native';
+import { Camera, AlertCircle, Clock, Settings, FolderOpen, PlayCircle, X } from 'lucide-react-native';
 
 const STUB_EVENTS = [
-  { id: '1', type: 'theft', desc: 'Item concealed in jacket pocket', conf: 0.92, time: '12:45 PM' },
-  { id: '2', type: 'suspicious', desc: 'Lingering near high-value goods', conf: 0.76, time: '11:20 AM' },
+  { id: '1', type: 'theft', desc: 'Item concealed in jacket pocket', conf: 0.92, time: '4/25/26, 12:45 PM', hasVideo: true },
+  { id: '2', type: 'suspicious', desc: 'Lingering near high-value goods', conf: 0.76, time: '4/25/26, 11:20 AM', hasVideo: false },
 ];
 
 export default function App() {
@@ -15,6 +15,7 @@ export default function App() {
 
   const [isGeneratingDigest, setIsGeneratingDigest] = useState(false);
   const [dailyDigest, setDailyDigest] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
 
   const generateDigest = () => {
     setIsGeneratingDigest(true);
@@ -86,8 +87,14 @@ export default function App() {
            
            <View style={styles.eventsList}>
              {STUB_EVENTS.map(ev => (
-                <View key={ev.id} style={styles.eventCard}>
-                  <View style={styles.eventImagePlaceholder} />
+                <TouchableOpacity key={ev.id} style={styles.eventCard} onPress={() => setSelectedEvent(ev)} activeOpacity={0.8}>
+                  <View style={styles.eventImagePlaceholder}>
+                     {ev.hasVideo && (
+                        <View style={{position:'absolute', inset: 0, justifyContent:'center', alignItems:'center', backgroundColor: 'rgba(0,0,0,0.3)', borderRadius:8}}>
+                           <PlayCircle color="#fff" size={24} />
+                        </View>
+                     )}
+                  </View>
                   <View style={styles.eventInfo}>
                      <View style={styles.eventTop}>
                        <Text style={[styles.eventBadge, { backgroundColor: ev.type === 'theft' ? '#991b1b' : '#854d0e' }]}>{ev.type.toUpperCase()}</Text>
@@ -95,7 +102,7 @@ export default function App() {
                      </View>
                      <Text style={styles.eventDesc}>{ev.desc}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
              ))}
            </View>
         </View>
@@ -134,6 +141,45 @@ export default function App() {
                <TouchableOpacity onPress={() => setDailyDigest(null)} style={{ marginTop: 24, alignSelf: 'flex-end', backgroundColor: '#1f2937', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}>
                   <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>Close</Text>
                </TouchableOpacity>
+            </View>
+         </View>
+      )}
+
+      {/* Event Replay Modal */}
+      {selectedEvent && (
+         <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center', padding: 16 }]}>
+            <View style={{ backgroundColor: '#111', borderRadius: 16, width: '100%', borderWidth: 1, borderColor: '#1f2937', overflow: 'hidden' }}>
+               
+               <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#1f2937', backgroundColor: '#1a1a1a'}}>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold', textTransform: 'uppercase' }}>{selectedEvent.type} Incident</Text>
+                  <TouchableOpacity onPress={() => setSelectedEvent(null)}>
+                     <X color="#9ca3af" size={20} />
+                  </TouchableOpacity>
+               </View>
+
+               <View style={{ height: 220, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }}>
+                  {selectedEvent.hasVideo ? (
+                     <View style={{alignItems: 'center'}}>
+                        <PlayCircle color="#3b82f6" size={48} />
+                        <Text style={{color: '#6b7280', marginTop: 8, fontSize: 12}}>Video Clip Ready (1:00)</Text>
+                     </View>
+                  ) : (
+                     <View style={{alignItems: 'center'}}>
+                        <Camera color="#4b5563" size={32} />
+                        <Text style={{color: '#6b7280', marginTop: 8, fontSize: 12}}>No Video Available</Text>
+                     </View>
+                  )}
+               </View>
+
+               <View style={{ padding: 16 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+                     <Text style={{ color: '#6b7280', fontSize: 12 }}>{selectedEvent.time}</Text>
+                     <Text style={{ color: '#9ca3af', fontSize: 10, fontWeight: 'bold', backgroundColor: '#1f2937', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                        {selectedEvent.conf * 100}% CONFIDENCE
+                     </Text>
+                  </View>
+                  <Text style={{ color: '#d1d5db', fontSize: 14 }}>{selectedEvent.desc}</Text>
+               </View>
             </View>
          </View>
       )}

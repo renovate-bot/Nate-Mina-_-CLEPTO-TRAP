@@ -76,6 +76,9 @@ export class App implements OnDestroy, OnInit {
   showSettings = signal(false);
   dailyDigest = signal<string | null>(null);
   isGeneratingDigest = signal(false);
+  
+  videoBlobs = signal<Map<string, string>>(new Map());
+  selectedEvent = signal<SecurityEvent | null>(null);
 
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
   private ai: GoogleGenAI;
@@ -415,27 +418,28 @@ Return a JSON object with 'type', 'description' (detailed and actionable explana
             imageUrl: lastFrameUrl // Keep last frame for the thumbnail
           };
           
+          let finalEventId = newEvent.id;
           if (this.user()) {
             // Save to Firestore
             const eventsRef = collection(db, 'users', this.user()!.uid, 'events');
-            await addDoc(eventsRef, {
+            const docRef = await addDoc(eventsRef, {
                type: newEvent.type,
                description: newEvent.description,
                confidence: newEvent.confidence,
                imageUrl: newEvent.imageUrl,
                timestamp: serverTimestamp()
             });
+            finalEventId = docRef.id;
           } else {
              // Local only mode
+             newEvent.id = finalEventId;
              this.events.update(events => [newEvent, ...events].slice(0, 50));
           }
           this.playSound(result.type);
           
-          if (this.autoSaveEnabled()) {
-             setTimeout(() => {
-                this.saveEventClipAndLog(feedId, result.description);
-             }, 5000); // give 5 seconds for consequence info
-          }
+          setTimeout(() => {
+             this.captureAndSaveEventVideo(feedId, finalEventId, result.description);
+          }, 5000); // give 5 seconds for consequence info
         }
       }
     } catch (error: any) {
@@ -522,7 +526,7 @@ Return a JSON object with 'type', 'description' (detailed and actionable explana
     }
   }
 
-  private saveEventClipAndLog(feedId: string, description: string) {
+  private captureAndSaveEventVideo(feedId: string, eventId: string, description: string) {
      const state = this.recorders.get(feedId);
      const chunks = state?.chunks || [];
      if (chunks.length === 0) return;
@@ -532,30 +536,38 @@ Return a JSON object with 'type', 'description' (detailed and actionable explana
      // Save Video
      const blob = new Blob(chunks, { type: 'video/webm' });
      const videoUrl = window.URL.createObjectURL(blob);
-     const aVid = document.createElement('a');
-     aVid.style.display = 'none';
-     aVid.href = videoUrl;
-     aVid.download = `CleptoTrap-Video-${timestampStr}.webm`;
-     document.body.appendChild(aVid);
-     aVid.click();
+     
+     // Store video URL for local replay
+     const newMap = new Map(this.videoBlobs());
+     newMap.set(eventId, videoUrl);
+     this.videoBlobs.set(newMap);
 
-     // Save Text Log
-     const logContent = `CLEPTO TRAP SECURITY ALERT LOG\n=================================\nTimestamp: ${new Date().toISOString()}\nFeed ID: ${feedId}\n\nEvent Description:\n${description}\n`;
-     const logBlob = new Blob([logContent], { type: 'text/plain' });
-     const logUrl = window.URL.createObjectURL(logBlob);
-     const aLog = document.createElement('a');
-     aLog.style.display = 'none';
-     aLog.href = logUrl;
-     aLog.download = `CleptoTrap-Log-${timestampStr}.txt`;
-     document.body.appendChild(aLog);
-     aLog.click();
+     if (this.autoSaveEnabled()) {
+         const aVid = document.createElement('a');
+         aVid.style.display = 'none';
+         aVid.href = videoUrl;
+         aVid.download = `CleptoTrap-Video-${timestampStr}.webm`;
+         document.body.appendChild(aVid);
+         aVid.click();
 
-     setTimeout(() => {
-        document.body.removeChild(aVid);
-        document.body.removeChild(aLog);
-        window.URL.revokeObjectURL(videoUrl);
-        window.URL.revokeObjectURL(logUrl);
-     }, 1000);
+         // Save Text Log
+         const logContent = `CLEPTO TRAP SECURITY ALERT LOG\n=================================\nTimestamp: ${new Date().toISOString()}\nFeed ID: ${feedId}\n\nEvent Description:\n${description}\n`;
+         const logBlob = new Blob([logContent], { type: 'text/plain' });
+         const logUrl = window.URL.createObjectURL(logBlob);
+         const aLog = document.createElement('a');
+         aLog.style.display = 'none';
+         aLog.href = logUrl;
+         aLog.download = `CleptoTrap-Log-${timestampStr}.txt`;
+         document.body.appendChild(aLog);
+         aLog.click();
+
+         setTimeout(() => {
+            document.body.removeChild(aVid);
+            document.body.removeChild(aLog);
+            window.URL.revokeObjectURL(logUrl);
+            // We do not revoke videoUrl because it's used for the replay modal
+         }, 1000);
+     }
   }
 
   closeDigest() {
